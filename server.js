@@ -48,6 +48,14 @@ app.get('/api/playlist', (req, res) => {
   res.json(data.playlist);
 });
 
+app.post('/api/playlist/delete', (req, res) => {
+  const { id } = req.body;
+  const data = readData();
+  data.playlist = data.playlist.filter(song => song.id !== id);
+  saveData(data);
+  res.json({ ok: true });
+});
+
 // ✅ 새 곡 추가하기
 app.post('/api/playlist', (req, res) => {
   const data = readData();
