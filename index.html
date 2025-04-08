@@ -28,10 +28,20 @@
     #player {
       display: none;
     }
+    #nowPlaying {
+      margin: 10px 0;
+      font-weight: bold;
+    }
+    #pauseButton {
+      margin-bottom: 15px;
+    }
   </style>
 </head>
 <body>
   <h2>Potato Music 🎵</h2>
+
+  <div id="nowPlaying">현재 재생 중: 없음</div>
+  <button id="pauseButton">⏸ 일시정지</button>
 
   <div>
     <input id="titleInput" placeholder="노래 제목" />
@@ -47,6 +57,7 @@
     const API_BASE = "https://potato-music.onrender.com";
     let songs = [];
     let player;
+    let isPaused = false;
 
     function loadSongs() {
       fetch(API_BASE + "/api/playlist")
@@ -138,11 +149,31 @@
         player.playVideo();
       }
 
+      document.getElementById("nowPlaying").textContent = "현재 재생 중: " + title;
+      isPaused = false;
+      updatePauseButton();
+
       fetch(API_BASE + "/api/play", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, title })
       });
+    }
+
+    function togglePause() {
+      if (!player) return;
+      if (isPaused) {
+        player.playVideo();
+      } else {
+        player.pauseVideo();
+      }
+      isPaused = !isPaused;
+      updatePauseButton();
+    }
+
+    function updatePauseButton() {
+      const btn = document.getElementById("pauseButton");
+      btn.textContent = isPaused ? "▶ 다시 재생" : "⏸ 일시정지";
     }
 
     function onYouTubeIframeAPIReady() {
@@ -160,6 +191,7 @@
                   player.loadVideoById(status.id);
                   player.unMute();
                   player.playVideo();
+                  document.getElementById("nowPlaying").textContent = "현재 재생 중: " + status.title;
                 }
               });
           }
@@ -171,6 +203,7 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("addButton").addEventListener("click", addSong);
+      document.getElementById("pauseButton").addEventListener("click", togglePause);
       loadSongs();
     });
 
