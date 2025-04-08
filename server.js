@@ -42,9 +42,10 @@ app.post("/api/playlist/delete", (req, res) => {
 });
 
 app.post("/api/play", (req, res) => {
-  const { id, title } = req.body;
+  const { id, title, startTime } = req.body;
   const now = Math.floor(Date.now() / 1000); // seconds
-  const status = { id, title, startTime: now, isPaused: false };
+  const start = startTime || now;
+  const status = { id, title, startTime: start, isPaused: false };
   fs.writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2));
   res.sendStatus(200);
 });
