@@ -36,7 +36,7 @@
   <div>
     <input id="titleInput" placeholder="노래 제목" />
     <input id="urlInput" placeholder="유튜브 링크" />
-    <button onclick="addSong()">추가</button>
+    <button id="addButton">추가</button>
   </div>
 
   <ul id="playlist"></ul>
@@ -106,7 +106,6 @@
         });
       });
     }
-    window.addSong = addSong;
 
     function deleteSong(index) {
       const song = songs[index];
@@ -155,11 +154,16 @@
       });
     }
 
+    window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("addButton").addEventListener("click", addSong);
+      loadSongs();
+    });
+
     const tag = document.createElement("script");
     tag.src = "https://www.youtube.com/iframe_api";
     document.head.appendChild(tag);
-
-    loadSongs();
   </script>
 </body>
 </html>
