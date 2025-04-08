@@ -68,6 +68,7 @@
     function playSong(id) {
       if (player) {
         player.loadVideoById(id);
+        player.playVideo(); // ✅ 바로 재생 보장
       }
     }
 
@@ -80,7 +81,7 @@
         const btn = document.createElement("button");
         btn.textContent = "재생";
         btn.onclick = () => {
-          playSong(song.id);
+          playSong(song.id);          // ✅ 재생 시작
           fetch(`${API_BASE}/api/play`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -97,15 +98,20 @@
         height: '0',
         width: '0',
         videoId: '',
-        playerVars: { autoplay: 1 },
+        playerVars: {
+          autoplay: 1,
+          mute: 1,         // iOS 자동재생 허용을 위해 처음엔 mute 필요
+          playsinline: 1
+        },
         events: {
           'onReady': () => {
-            // 현재 재생 중인 곡 불러와 자동 재생
+            // 현재 재생 중인 곡 자동 재생
             fetch(`${API_BASE}/api/status`)
               .then(res => res.json())
               .then(status => {
                 if (status?.id) {
-                  playSong(status.id);
+                  player.loadVideoById(status.id);
+                  player.playVideo(); // ✅ 자동재생 보장
                 }
               });
           }
@@ -116,7 +122,7 @@
     // 초기 실행
     loadSongs();
 
-    // YouTube API 스크립트 추가
+    // YouTube API 로드
     const tag = document.createElement('script');
     tag.src = "https://www.youtube.com/iframe_api";
     document.head.appendChild(tag);
