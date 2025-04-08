@@ -247,12 +247,25 @@
       });
     }
 
-    function playNextSong() {
-      if (currentIndex + 1 < songs.length) {
-        const next = songs[currentIndex + 1];
-        playSong(next.id, next.title, currentIndex + 1);
-      }
-    }
+function playNextSong() {
+  if (currentIndex + 1 < songs.length) {
+    const next = songs[currentIndex + 1];
+    playSong(next.id, next.title, currentIndex + 1);
+  } else {
+    // 마지막 곡 끝났을 때 서버 상태 초기화
+    fetch(API_BASE + "/api/pause", { method: "POST" });
+    fetch(API_BASE + "/api/play", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "",
+        title: "",
+        startTime: 0
+      })
+    });
+    document.getElementById("nowPlaying").textContent = "현재 재생 중: 없음";
+  }
+}
 
     window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
 
