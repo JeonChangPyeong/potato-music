@@ -5,16 +5,29 @@
   <title>Potato Music</title>
   <style>
     body { font-family: sans-serif; padding: 20px; }
-    li { margin-bottom: 8px; background: #f5f5f5; padding: 10px; border-radius: 5px; }
+    li {
+      margin-bottom: 8px;
+      background: #f5f5f5;
+      padding: 10px;
+      border-radius: 5px;
+      list-style: none;
+      cursor: grab;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    li.dragging {
+      opacity: 0.5;
+      background-color: #d0ebff;
+    }
     button { margin-left: 6px; }
+    .controls { display: flex; gap: 4px; }
   </style>
 </head>
 <body>
 
   <h2>Potato Music 🎵</h2>
-
   <div id="player"></div>
-
   <ul id="songList"></ul>
 
   <input type="text" id="newTitle" placeholder="노래 제목">
@@ -22,10 +35,9 @@
   <button onclick="addSong()">추가</button>
 
   <script>
+    const API_BASE = "https://potato-music.onrender.com";
     let songs = [];
     let player;
-
-    const API_BASE = "https://potato-music.onrender.com";
 
     function loadSongs() {
       fetch(`${API_BASE}/api/playlist`)
@@ -37,14 +49,10 @@
     }
 
     function addSong() {
-      const titleInput = document.getElementById("newTitle");
-      const urlInput = document.getElementById("newSong");
-      const url = urlInput.value.trim();
-      const title = titleInput.value.trim() || "제목 없음";
-
+      const title = document.getElementById("newTitle").value.trim() || "제목 없음";
+      const url = document.getElementById("newSong").value.trim();
       const match = url.match(/v=([^&]+)/);
       if (!match) return alert("유튜브 링크가 올바르지 않습니다.");
-
       const id = match[1];
 
       fetch(`${API_BASE}/api/playlist`, {
@@ -59,8 +67,8 @@
         }).then(() => {
           loadSongs();
           playSong(id);
-          titleInput.value = '';
-          urlInput.value = '';
+          document.getElementById("newTitle").value = '';
+          document.getElementById("newSong").value = '';
         });
       });
     }
@@ -68,29 +76,81 @@
     function playSong(id) {
       if (player) {
         player.loadVideoById(id);
-        player.playVideo(); // ✅ 바로 재생 보장
+        player.playVideo();
       }
     }
 
+    function deleteSong(index) {
+      songs.splice(index, 1);
+      renderSongs(); // 서버 동기화 필요 시 여기에 API 추가 가능
+    }
     function renderSongs() {
       const list = document.getElementById("songList");
       list.innerHTML = '';
-      songs.forEach(song => {
+      songs.forEach((song, index) => {
         const li = document.createElement("li");
+        li.setAttribute("draggable", "true");
+        li.dataset.index = index;
         li.textContent = song.title;
-        const btn = document.createElement("button");
-        btn.textContent = "재생";
-        btn.onclick = () => {
-          playSong(song.id);          // ✅ 재생 시작
+
+        const controls = document.createElement("div");
+        controls.className = "controls";
+
+        const playBtn = document.createElement("button");
+        playBtn.textContent = "재생";
+        playBtn.onclick = () => {
+          playSong(song.id);
           fetch(`${API_BASE}/api/play`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ id: song.id, title: song.title })
           });
         };
-        li.appendChild(btn);
+
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "삭제";
+        delBtn.onclick = () => deleteSong(index);
+
+        controls.appendChild(playBtn);
+        controls.appendChild(delBtn);
+        li.appendChild(controls);
         list.appendChild(li);
       });
+
+      addDragEvents();
+    }
+
+    function addDragEvents() {
+      const list = document.getElementById("songList");
+      let draggingEl;
+
+      list.querySelectorAll("li").forEach(item => {
+        item.addEventListener("dragstart", () => {
+          draggingEl = item;
+          item.classList.add("dragging");
+        });
+
+        item.addEventListener("dragend", () => {
+          item.classList.remove("dragging");
+        });
+
+        item.addEventListener("dragover", (e) => {
+          e.preventDefault();
+          const after = getDragAfterElement(list, e.clientY);
+          if (after == null) list.appendChild(draggingEl);
+          else list.insertBefore(draggingEl, after);
+        });
+      });
+    }
+
+    function getDragAfterElement(container, y) {
+      const els = [...container.querySelectorAll("li:not(.dragging)")];
+      return els.reduce((closest, el) => {
+        const box = el.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) return { offset, element: el };
+        else return closest;
+      }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
 
     function onYouTubeIframeAPIReady() {
@@ -98,19 +158,15 @@
         height: '0',
         width: '0',
         videoId: '',
-        playerVars: {
-          autoplay: 1,
-          playsinline: 1
-        },
+        playerVars: { autoplay: 1, mute: 0, playsinline: 1 },
         events: {
           'onReady': () => {
-            // 현재 재생 중인 곡 자동 재생
             fetch(`${API_BASE}/api/status`)
               .then(res => res.json())
               .then(status => {
                 if (status?.id) {
                   player.loadVideoById(status.id);
-                  player.playVideo(); // ✅ 자동재생 보장
+                  player.playVideo();
                 }
               });
           }
@@ -118,10 +174,7 @@
       });
     }
 
-    // 초기 실행
     loadSongs();
-
-    // YouTube API 로드
     const tag = document.createElement('script');
     tag.src = "https://www.youtube.com/iframe_api";
     document.head.appendChild(tag);
