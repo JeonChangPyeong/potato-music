@@ -174,19 +174,20 @@
       });
     }
 
-    function playNextSong() {
-      if (currentIndex + 1 < songs.length) {
-        const next = songs[currentIndex + 1];
-        playSong(next.id, next.title, currentIndex + 1);
-      }
-    }
-
     function togglePause() {
       if (!player) return;
       if (isPaused) {
         player.playVideo();
+        fetch(API_BASE + "/api/play", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: songs[currentIndex]?.id, title: songs[currentIndex]?.title })
+        });
       } else {
         player.pauseVideo();
+        fetch(API_BASE + "/api/pause", {
+          method: "POST"
+        });
       }
       isPaused = !isPaused;
       updatePauseButton();
@@ -210,7 +211,17 @@
               .then(status => {
                 const foundIndex = songs.findIndex(s => s.id === status.id);
                 if (status?.id && foundIndex !== -1) {
-                  playSong(status.id, status.title, foundIndex);
+                  const elapsed = Math.floor(Date.now() / 1000) - status.startTime;
+                  currentIndex = foundIndex;
+                  isPaused = status.isPaused;
+                  updatePauseButton();
+                  player.loadVideoById(status.id);
+                  player.seekTo(elapsed, true);
+                  if (!status.isPaused) {
+                    player.unMute();
+                    player.playVideo();
+                  }
+                  document.getElementById("nowPlaying").textContent = "현재 재생 중: " + status.title;
                 }
               });
           },
@@ -221,6 +232,13 @@
           }
         }
       });
+    }
+
+    function playNextSong() {
+      if (currentIndex + 1 < songs.length) {
+        const next = songs[currentIndex + 1];
+        playSong(next.id, next.title, currentIndex + 1);
+      }
     }
 
     window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
