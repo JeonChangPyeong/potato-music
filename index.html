@@ -58,6 +58,7 @@
     let songs = [];
     let player;
     let isPaused = false;
+    let currentIndex = -1;
 
     function loadSongs() {
       fetch(API_BASE + "/api/playlist")
@@ -84,7 +85,7 @@
 
         const playBtn = document.createElement("button");
         playBtn.textContent = "재생";
-        playBtn.onclick = () => playSong(song.id, song.title);
+        playBtn.onclick = () => playSong(song.id, song.title, index);
 
         const delBtn = document.createElement("button");
         delBtn.textContent = "삭제";
@@ -118,16 +119,9 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(song)
       }).then(() => {
-        fetch(API_BASE + "/api/play", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(song)
-        }).then(() => {
-          document.getElementById("titleInput").value = "";
-          document.getElementById("urlInput").value = "";
-          loadSongs();
-          playSong(id, title);
-        });
+        document.getElementById("titleInput").value = "";
+        document.getElementById("urlInput").value = "";
+        loadSongs();
       });
     }
 
@@ -142,7 +136,7 @@
       });
     }
 
-    function playSong(id, title) {
+    function playSong(id, title, index) {
       if (player) {
         player.loadVideoById(id);
         player.unMute();
@@ -152,12 +146,20 @@
       document.getElementById("nowPlaying").textContent = "현재 재생 중: " + title;
       isPaused = false;
       updatePauseButton();
+      currentIndex = index;
 
       fetch(API_BASE + "/api/play", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, title })
       });
+    }
+
+    function playNextSong() {
+      if (currentIndex + 1 < songs.length) {
+        const next = songs[currentIndex + 1];
+        playSong(next.id, next.title, currentIndex + 1);
+      }
     }
 
     function togglePause() {
@@ -187,13 +189,16 @@
             fetch(API_BASE + "/api/status")
               .then(res => res.json())
               .then(status => {
-                if (status?.id) {
-                  player.loadVideoById(status.id);
-                  player.unMute();
-                  player.playVideo();
-                  document.getElementById("nowPlaying").textContent = "현재 재생 중: " + status.title;
+                const foundIndex = songs.findIndex(s => s.id === status.id);
+                if (status?.id && foundIndex !== -1) {
+                  playSong(status.id, status.title, foundIndex);
                 }
               });
+          },
+          onStateChange: (event) => {
+            if (event.data === YT.PlayerState.ENDED) {
+              playNextSong();
+            }
           }
         }
       });
