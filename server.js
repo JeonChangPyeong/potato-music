@@ -16,7 +16,7 @@ if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, "[]");
 if (!fs.existsSync(STATUS_FILE)) {
   fs.writeFileSync(
     STATUS_FILE,
-    JSON.stringify({ id: "", title: "", startTime: 0, isPaused: false })
+    JSON.stringify({ id: "", title: "", startTime: 0, isPaused: false }, null, 2)
   );
 }
 
@@ -38,12 +38,21 @@ app.post("/api/playlist/delete", (req, res) => {
   const data = JSON.parse(fs.readFileSync(DATA_FILE));
   const filtered = data.filter(item => item.id !== id);
   fs.writeFileSync(DATA_FILE, JSON.stringify(filtered, null, 2));
+
+  // 자동 초기화: 곡이 모두 삭제되었으면 status도 초기화
+  if (filtered.length === 0) {
+    fs.writeFileSync(
+      STATUS_FILE,
+      JSON.stringify({ id: "", title: "", startTime: 0, isPaused: false }, null, 2)
+    );
+  }
+
   res.sendStatus(200);
 });
 
 app.post("/api/play", (req, res) => {
   const { id, title, startTime } = req.body;
-  const now = Math.floor(Date.now() / 1000); // seconds
+  const now = Math.floor(Date.now() / 1000);
   const start = startTime || now;
   const status = { id, title, startTime: start, isPaused: false };
   fs.writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2));
