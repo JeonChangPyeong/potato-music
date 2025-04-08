@@ -72,6 +72,7 @@
     let player;
     let isPaused = false;
     let currentIndex = -1;
+    let lastTime = 0;
 
     function loadSongs() {
       fetch(API_BASE + "/api/playlist")
@@ -224,14 +225,21 @@
                   document.getElementById("nowPlaying").textContent = "현재 재생 중: " + status.title;
                 }
               });
+
+            setInterval(() => {
+              if (!player || typeof player.getCurrentTime !== "function") return;
+              const current = Math.floor(player.getCurrentTime());
+              if (Math.abs(current - lastTime) >= 3) {
+                const song = songs[currentIndex];
+                if (song) {
+                  syncPlayStatusToServer(song.id, song.title, current);
+                }
+              }
+              lastTime = current;
+            }, 1000);
           },
           onStateChange: (event) => {
-            if (event.data === YT.PlayerState.PLAYING) {
-              const id = songs[currentIndex]?.id;
-              const title = songs[currentIndex]?.title;
-              const current = Math.floor(player.getCurrentTime());
-              if (id && title) syncPlayStatusToServer(id, title, current);
-            } else if (event.data === YT.PlayerState.ENDED) {
+            if (event.data === YT.PlayerState.ENDED) {
               playNextSong();
             }
           }
