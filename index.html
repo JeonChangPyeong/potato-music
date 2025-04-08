@@ -49,7 +49,7 @@
     let player;
 
     function loadSongs() {
-      fetch(\`\${API_BASE}/api/playlist\`)
+      fetch(API_BASE + "/api/playlist")
         .then(res => res.json())
         .then(data => {
           songs = data;
@@ -64,13 +64,26 @@
       songs.forEach((song, index) => {
         const li = document.createElement("li");
         li.setAttribute("data-id", index);
-        li.innerHTML = \`
-          <span>\${song.title}</span>
-          <div class="controls">
-            <button onclick="playSong('\${song.id}', '\${song.title}')">재생</button>
-            <button onclick="deleteSong(\${index})">삭제</button>
-          </div>
-        \`;
+
+        const titleSpan = document.createElement("span");
+        titleSpan.textContent = song.title;
+
+        const controlsDiv = document.createElement("div");
+        controlsDiv.className = "controls";
+
+        const playBtn = document.createElement("button");
+        playBtn.textContent = "재생";
+        playBtn.onclick = () => playSong(song.id, song.title);
+
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "삭제";
+        delBtn.onclick = () => deleteSong(index);
+
+        controlsDiv.appendChild(playBtn);
+        controlsDiv.appendChild(delBtn);
+
+        li.appendChild(titleSpan);
+        li.appendChild(controlsDiv);
         list.appendChild(li);
       });
 
@@ -89,12 +102,12 @@
       const id = match[1];
       const song = { title, id };
 
-      fetch(\`\${API_BASE}/api/playlist\`, {
+      fetch(API_BASE + "/api/playlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(song)
       }).then(() => {
-        fetch(\`\${API_BASE}/api/play\`, {
+        fetch(API_BASE + "/api/play", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(song)
@@ -109,7 +122,7 @@
 
     function deleteSong(index) {
       const song = songs[index];
-      fetch(\`\${API_BASE}/api/playlist/delete\`, {
+      fetch(API_BASE + "/api/playlist/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: song.id })
@@ -125,7 +138,7 @@
         player.playVideo();
       }
 
-      fetch(\`\${API_BASE}/api/play\`, {
+      fetch(API_BASE + "/api/play", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, title })
@@ -140,7 +153,7 @@
         playerVars: { autoplay: 1, mute: 0, playsinline: 1 },
         events: {
           onReady: () => {
-            fetch(\`\${API_BASE}/api/status\`)
+            fetch(API_BASE + "/api/status")
               .then(res => res.json())
               .then(status => {
                 if (status?.id) {
