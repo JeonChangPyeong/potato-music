@@ -2,14 +2,15 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Potato Music</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
+    body { font-family: sans-serif; padding: 20px; background: #fff; }
+    ul { padding: 0; }
     li {
-      margin-bottom: 8px;
-      background: #f5f5f5;
       padding: 10px;
+      margin-bottom: 5px;
+      background: #f1f1f1;
       border-radius: 5px;
       list-style: none;
       cursor: grab;
@@ -21,167 +22,143 @@
       opacity: 0.5;
       background-color: #d0ebff;
     }
-    button { margin-left: 6px; }
-    .controls { display: flex; gap: 4px; }
+    .controls button {
+      margin-left: 6px;
+    }
+    #player {
+      display: none;
+    }
   </style>
 </head>
 <body>
+  <h2>Potato Music 🎵</h2>
 
-<h2>Potato Music 🎵</h2>
-<div id="player"></div>
-<ul id="songList"></ul>
+  <div>
+    <input id="titleInput" placeholder="노래 제목" />
+    <input id="urlInput" placeholder="유튜브 링크" />
+    <button onclick="addSong()">추가</button>
+  </div>
 
-<input type="text" id="newTitle" placeholder="노래 제목">
-<input type="text" id="newSong" placeholder="YouTube 링크">
-<button onclick="addSong()">추가</button>
+  <ul id="playlist"></ul>
+  <div id="player"></div>
 
-<script>
-const API_BASE = "https://potato-music.onrender.com";
-let songs = [];
-let player;
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
+  <script>
+    const API_BASE = "https://potato-music.onrender.com";
+    let songs = [];
+    let player;
 
-function loadSongs() {
-  fetch(\`\${API_BASE}/api/playlist\`)
-    .then(res => res.json())
-    .then(data => {
-      songs = data;
-      renderSongs();
-    });
-}
+    function loadSongs() {
+      fetch(\`\${API_BASE}/api/playlist\`)
+        .then(res => res.json())
+        .then(data => {
+          songs = data;
+          renderPlaylist();
+        });
+    }
 
-function addSong() {
-  const titleInput = document.getElementById("newTitle");
-  const urlInput = document.getElementById("newSong");
-  const title = titleInput.value.trim() || "제목 없음";
-  const url = urlInput.value.trim();
-  const match = url.match(/v=([^&]+)/);
-  if (!match) return alert("유튜브 링크가 올바르지 않습니다.");
-  const id = match[1];
+    function renderPlaylist() {
+      const list = document.getElementById("playlist");
+      list.innerHTML = "";
 
-  fetch(\`\${API_BASE}/api/playlist\`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, title })
-  }).then(() => {
-    fetch(\`\${API_BASE}/api/play\`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, title })
-    }).then(() => {
-      loadSongs();
-      playSongById(id);
-      titleInput.value = '';
-      urlInput.value = '';
-    });
-  });
-}
+      songs.forEach((song, index) => {
+        const li = document.createElement("li");
+        li.setAttribute("data-id", index);
+        li.innerHTML = \`
+          <span>\${song.title}</span>
+          <div class="controls">
+            <button onclick="playSong('\${song.id}', '\${song.title}')">재생</button>
+            <button onclick="deleteSong(\${index})">삭제</button>
+          </div>
+        \`;
+        list.appendChild(li);
+      });
 
-function playSongById(id) {
-  if (player) {
-    player.loadVideoById(id);
-    player.unMute();
-    player.playVideo();
-  }
-}
+      Sortable.create(list, {
+        animation: 150,
+        onStart: evt => evt.item.classList.add("dragging"),
+        onEnd: evt => evt.item.classList.remove("dragging")
+      });
+    }
 
-function renderSongs() {
-  const list = document.getElementById("songList");
-  list.innerHTML = '';
-  songs.forEach((song, index) => {
-    const li = document.createElement("li");
-    li.setAttribute("draggable", "true");
-    li.dataset.index = index;
-    li.textContent = song.title;
+    function addSong() {
+      const title = document.getElementById("titleInput").value.trim();
+      const url = document.getElementById("urlInput").value.trim();
+      const match = url.match(/v=([^&]+)/);
+      if (!match) return alert("유튜브 링크가 올바르지 않습니다.");
+      const id = match[1];
+      const song = { title, id };
 
-    const controls = document.createElement("div");
-    controls.className = "controls";
+      fetch(\`\${API_BASE}/api/playlist\`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(song)
+      }).then(() => {
+        fetch(\`\${API_BASE}/api/play\`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(song)
+        }).then(() => {
+          document.getElementById("titleInput").value = "";
+          document.getElementById("urlInput").value = "";
+          loadSongs();
+          playSong(id, title);
+        });
+      });
+    }
 
-    const playBtn = document.createElement("button");
-    playBtn.textContent = "재생";
-    playBtn.onclick = () => {
-      playSongById(song.id);
+    function deleteSong(index) {
+      const song = songs[index];
+      fetch(\`\${API_BASE}/api/playlist/delete\`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: song.id })
+      }).then(() => {
+        loadSongs();
+      });
+    }
+
+    function playSong(id, title) {
+      if (player) {
+        player.loadVideoById(id);
+        player.unMute();
+        player.playVideo();
+      }
+
       fetch(\`\${API_BASE}/api/play\`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: song.id, title: song.title })
+        body: JSON.stringify({ id, title })
       });
-    };
-
-    const delBtn = document.createElement("button");
-    delBtn.textContent = "삭제";
-    delBtn.onclick = () => {
-      songs.splice(index, 1);
-      renderSongs();
-    };
-
-    controls.appendChild(playBtn);
-    controls.appendChild(delBtn);
-    li.appendChild(controls);
-    list.appendChild(li);
-  });
-
-  addDragEvents();
-}
-
-function addDragEvents() {
-  const list = document.getElementById("songList");
-  let draggingEl;
-
-  list.querySelectorAll("li").forEach(item => {
-    item.addEventListener("dragstart", () => {
-      draggingEl = item;
-      item.classList.add("dragging");
-    });
-
-    item.addEventListener("dragend", () => {
-      item.classList.remove("dragging");
-    });
-
-    item.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      const after = getDragAfterElement(list, e.clientY);
-      if (after == null) list.appendChild(draggingEl);
-      else list.insertBefore(draggingEl, after);
-    });
-  });
-}
-
-function getDragAfterElement(container, y) {
-  const els = [...container.querySelectorAll("li:not(.dragging)")];
-  return els.reduce((closest, el) => {
-    const box = el.getBoundingClientRect();
-    const offset = y - box.top - box.height / 2;
-    if (offset < 0 && offset > closest.offset) return { offset, element: el };
-    else return closest;
-  }, { offset: Number.NEGATIVE_INFINITY }).element;
-}
-
-function onYouTubeIframeAPIReady() {
-  player = new YT.Player('player', {
-    height: '0',
-    width: '0',
-    videoId: '',
-    playerVars: { autoplay: 1, mute: 0, playsinline: 1 },
-    events: {
-      'onReady': () => {
-        fetch(\`\${API_BASE}/api/status\`)
-          .then(res => res.json())
-          .then(status => {
-            if (status?.id) {
-              player.loadVideoById(status.id);
-              player.unMute();
-              player.playVideo();
-            }
-          });
-      }
     }
-  });
-}
 
-loadSongs();
-const tag = document.createElement('script');
-tag.src = "https://www.youtube.com/iframe_api";
-document.head.appendChild(tag);
-</script>
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player("player", {
+        height: "0",
+        width: "0",
+        videoId: "",
+        playerVars: { autoplay: 1, mute: 0, playsinline: 1 },
+        events: {
+          onReady: () => {
+            fetch(\`\${API_BASE}/api/status\`)
+              .then(res => res.json())
+              .then(status => {
+                if (status?.id) {
+                  player.loadVideoById(status.id);
+                  player.unMute();
+                  player.playVideo();
+                }
+              });
+          }
+        }
+      });
+    }
+
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+
+    loadSongs();
+  </script>
 </body>
 </html>
