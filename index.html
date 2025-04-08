@@ -155,6 +155,16 @@
       });
     }
 
+    function syncPlayStatusToServer(id, title, seekSeconds) {
+      const now = Math.floor(Date.now() / 1000);
+      const adjustedStart = now - seekSeconds;
+      fetch(API_BASE + "/api/play", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, title, startTime: adjustedStart })
+      });
+    }
+
     function playSong(id, title, index) {
       if (player) {
         player.loadVideoById(id);
@@ -167,27 +177,17 @@
       updatePauseButton();
       currentIndex = index;
 
-      fetch(API_BASE + "/api/play", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, title })
-      });
+      syncPlayStatusToServer(id, title, 0); // 처음부터 재생
     }
 
     function togglePause() {
       if (!player) return;
       if (isPaused) {
         player.playVideo();
-        fetch(API_BASE + "/api/play", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: songs[currentIndex]?.id, title: songs[currentIndex]?.title })
-        });
+        syncPlayStatusToServer(songs[currentIndex].id, songs[currentIndex].title, Math.floor(player.getCurrentTime()));
       } else {
         player.pauseVideo();
-        fetch(API_BASE + "/api/pause", {
-          method: "POST"
-        });
+        fetch(API_BASE + "/api/pause", { method: "POST" });
       }
       isPaused = !isPaused;
       updatePauseButton();
@@ -226,7 +226,12 @@
               });
           },
           onStateChange: (event) => {
-            if (event.data === YT.PlayerState.ENDED) {
+            if (event.data === YT.PlayerState.PLAYING) {
+              const id = songs[currentIndex]?.id;
+              const title = songs[currentIndex]?.title;
+              const current = Math.floor(player.getCurrentTime());
+              if (id && title) syncPlayStatusToServer(id, title, current);
+            } else if (event.data === YT.PlayerState.ENDED) {
               playNextSong();
             }
           }
