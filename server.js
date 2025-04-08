@@ -11,7 +11,7 @@ app.use(express.json());
 const DATA_FILE = "data.json";
 const STATUS_FILE = "status.json";
 
-// Ensure files exist
+// 기본 파일 생성
 if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, "[]");
 if (!fs.existsSync(STATUS_FILE)) {
   fs.writeFileSync(
@@ -39,7 +39,7 @@ app.post("/api/playlist/delete", (req, res) => {
   const filtered = data.filter(item => item.id !== id);
   fs.writeFileSync(DATA_FILE, JSON.stringify(filtered, null, 2));
 
-  // 자동 초기화: 곡이 모두 삭제되었으면 status도 초기화
+  // 플레이리스트 비면 상태 초기화
   if (filtered.length === 0) {
     fs.writeFileSync(
       STATUS_FILE,
@@ -53,16 +53,20 @@ app.post("/api/playlist/delete", (req, res) => {
 app.post("/api/play", (req, res) => {
   const { id, title, startTime } = req.body;
   const now = Math.floor(Date.now() / 1000);
-  const start = startTime || now;
-  const status = { id, title, startTime: start, isPaused: false };
+  const status = {
+    id,
+    title,
+    startTime: startTime || now,
+    isPaused: false
+  };
   fs.writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2));
   res.sendStatus(200);
 });
 
 app.post("/api/pause", (req, res) => {
   const current = JSON.parse(fs.readFileSync(STATUS_FILE));
-  const updated = { ...current, isPaused: true };
-  fs.writeFileSync(STATUS_FILE, JSON.stringify(updated, null, 2));
+  current.isPaused = true;
+  fs.writeFileSync(STATUS_FILE, JSON.stringify(current, null, 2));
   res.sendStatus(200);
 });
 
@@ -72,5 +76,5 @@ app.get("/api/status", (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`✅ Server running on port ${PORT}`);
 });
