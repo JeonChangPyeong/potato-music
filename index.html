@@ -13,20 +13,21 @@
       background: #f1f1f1;
       border-radius: 5px;
       list-style: none;
-      cursor: grab;
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      gap: 10px;
     }
     li.dragging {
       opacity: 0.5;
       background-color: #d0ebff;
     }
+    li img.thumbnail {
+      width: 90px;
+      height: 60px;
+      border-radius: 4px;
+    }
     .controls button {
       margin-left: 6px;
-    }
-    #player {
-      display: none;
     }
     #nowPlaying {
       margin: 10px 0;
@@ -34,6 +35,15 @@
     }
     #pauseButton {
       margin-bottom: 15px;
+    }
+    #playerContainer {
+      margin-top: 30px;
+      display: flex;
+      justify-content: center;
+    }
+    #player {
+      width: 480px;
+      height: 270px;
     }
   </style>
 </head>
@@ -50,7 +60,10 @@
   </div>
 
   <ul id="playlist"></ul>
-  <div id="player"></div>
+
+  <div id="playerContainer">
+    <div id="player"></div>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
   <script>
@@ -77,8 +90,13 @@
         const li = document.createElement("li");
         li.setAttribute("data-id", index);
 
-        const titleSpan = document.createElement("span");
-        titleSpan.textContent = song.title;
+        const thumbnail = document.createElement("img");
+        thumbnail.className = "thumbnail";
+        thumbnail.src = `https://img.youtube.com/vi/${song.id}/mqdefault.jpg`;
+
+        const info = document.createElement("div");
+        info.style.flexGrow = "1";
+        info.innerHTML = `<strong>${song.title}</strong>`;
 
         const controlsDiv = document.createElement("div");
         controlsDiv.className = "controls";
@@ -94,7 +112,8 @@
         controlsDiv.appendChild(playBtn);
         controlsDiv.appendChild(delBtn);
 
-        li.appendChild(titleSpan);
+        li.appendChild(thumbnail);
+        li.appendChild(info);
         li.appendChild(controlsDiv);
         list.appendChild(li);
       });
@@ -180,8 +199,8 @@
 
     function onYouTubeIframeAPIReady() {
       player = new YT.Player("player", {
-        height: "0",
-        width: "0",
+        height: "270",
+        width: "480",
         videoId: "",
         playerVars: { autoplay: 1, mute: 0, playsinline: 1 },
         events: {
