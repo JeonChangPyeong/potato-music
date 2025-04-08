@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>Potato Music</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    li { margin-bottom: 8px; background: #f5f5f5; padding: 10px; border-radius: 5px; }
+    button { margin-left: 6px; }
+  </style>
+</head>
+<body>
+
+  <h2>Potato Music 🎵</h2>
+
+  <div id="player"></div>
+
+  <ul id="songList"></ul>
+
+  <input type="text" id="newTitle" placeholder="노래 제목">
+  <input type="text" id="newSong" placeholder="YouTube 링크">
+  <button onclick="addSong()">추가</button>
+
+  <script>
+    let songs = [];
+    let player;
+
+    const API_BASE = "https://potato-music.onrender.com";
+
+    function loadSongs() {
+      fetch(`${API_BASE}/api/playlist`)
+        .then(res => res.json())
+        .then(data => {
+          songs = data;
+          renderSongs();
+        });
+    }
+
+    function addSong() {
+      const titleInput = document.getElementById("newTitle");
+      const urlInput = document.getElementById("newSong");
+      const url = urlInput.value.trim();
+      const title = titleInput.value.trim() || "제목 없음";
+
+      const match = url.match(/v=([^&]+)/);
+      if (!match) return alert("유튜브 링크가 올바르지 않습니다.");
+
+      const id = match[1];
+
+      fetch(`${API_BASE}/api/playlist`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, title })
+      }).then(() => {
+        fetch(`${API_BASE}/api/play`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id, title })
+        }).then(() => {
+          loadSongs();
+          playSong(id);
+          titleInput.value = '';
+          urlInput.value = '';
+        });
+      });
+    }
+
+    function playSong(id) {
+      if (player) {
+        player.loadVideoById(id);
+      }
+    }
+
+    function renderSongs() {
+      const list = document.getElementById("songList");
+      list.innerHTML = '';
+      songs.forEach(song => {
+        const li = document.createElement("li");
+        li.textContent = song.title;
+        const btn = document.createElement("button");
+        btn.textContent = "재생";
+        btn.onclick = () => {
+          playSong(song.id);
+          fetch(`${API_BASE}/api/play`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id: song.id, title: song.title })
+          });
+        };
+        li.appendChild(btn);
+        list.appendChild(li);
+      });
+    }
+
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player('player', {
+        height: '0',
+        width: '0',
+        videoId: '',
+        playerVars: { autoplay: 1 },
+        events: {
+          'onReady': () => {
+            // 현재 재생 중인 곡 불러와 자동 재생
+            fetch(`${API_BASE}/api/status`)
+              .then(res => res.json())
+              .then(status => {
+                if (status?.id) {
+                  playSong(status.id);
+                }
+              });
+          }
+        }
+      });
+    }
+
+    // 초기 실행
+    loadSongs();
+
+    // YouTube API 스크립트 추가
+    const tag = document.createElement('script');
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+  </script>
+</body>
+</html>
