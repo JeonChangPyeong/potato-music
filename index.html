@@ -244,6 +244,18 @@
               const t = Math.floor(player.getCurrentTime());
               sendWSMessage({ type: "play", id: currentId, title: currentTitle, startTime: Math.floor(Date.now() / 1000) - t, isPaused: false });
             }
+            if (event.data === YT.PlayerState.ENDED) {
+              if (currentIndex + 1 < songs.length) {
+                const next = songs[currentIndex + 1];
+                playSong(next.id, next.title, currentIndex + 1);
+              } else {
+                // 마지막 곡이면 재생 종료 상태로 처리
+                sendWSMessage({ type: "pause", id: currentId });
+                document.getElementById("nowPlaying").textContent = "현재 재생 중: 없음";
+                isPaused = true;
+                updatePauseButton();
+              }
+            }
           }
         }
       });
