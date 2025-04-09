@@ -71,7 +71,6 @@
     let player;
     let isPaused = false;
     let currentIndex = -1;
-
     let currentId = "";
     let currentTitle = "";
 
@@ -137,13 +136,6 @@
       });
     }
 
-    function onPlayerStateChange(event) {
-      if (event.data === YT.PlayerState.PLAYING && currentId) {
-        const time = Math.floor(player.getCurrentTime());
-        syncPlayStatusToServer(currentId, currentTitle, time);
-      }
-    }
-
     function addSong() {
       const title = document.getElementById("titleInput").value.trim();
       const url = document.getElementById("urlInput").value.trim();
@@ -175,16 +167,17 @@
     }
 
     function playSong(id, title, index) {
+      currentId = id;
+      currentTitle = title;
       syncPlayStatusToServer(id, title, 0).then(() => {
         if (player) {
           player.loadVideoById(id);
-          // player.unMute();
-          player.playVideo();
+          player.playVideo(); // 🔇 웹은 무음
         }
+        currentIndex = index;
         document.getElementById("nowPlaying").textContent = "현재 재생 중: " + title;
         isPaused = false;
         updatePauseButton();
-        currentIndex = index;
       });
     }
 
@@ -206,6 +199,29 @@
       btn.textContent = isPaused ? "▶ 다시 재생" : "⏸ 일시정지";
     }
 
+    function playNextSong() {
+      if (currentIndex + 1 < songs.length) {
+        const next = songs[currentIndex + 1];
+        playSong(next.id, next.title, currentIndex + 1);
+      } else {
+        syncPlayStatusToServer("", "", 0).then(() => {
+          fetch(API_BASE + "/api/pause", { method: "POST" });
+          document.getElementById("nowPlaying").textContent = "현재 재생 중: 없음";
+        });
+      }
+    }
+
+    function onPlayerStateChange(event) {
+      if (event.data === YT.PlayerState.PLAYING && currentId) {
+        const time = Math.floor(player.getCurrentTime());
+        syncPlayStatusToServer(currentId, currentTitle, time);
+      }
+
+      if (event.data === YT.PlayerState.ENDED) {
+        playNextSong();
+      }
+    }
+
     function onYouTubeIframeAPIReady() {
       player = new YT.Player("player", {
         height: "270",
@@ -222,37 +238,16 @@
                   const elapsed = Math.floor(Date.now() / 1000) - status.startTime;
                   currentIndex = foundIndex;
                   isPaused = status.isPaused;
-                  updatePauseButton();
                   player.loadVideoById(status.id);
                   player.seekTo(elapsed, true);
-                  if (!status.isPaused) {
-                    // player.unMute();
-                    player.playVideo();
-                  }
                   document.getElementById("nowPlaying").textContent = "현재 재생 중: " + status.title;
                 }
               });
           },
-          onStateChange: (event) => {
-            if (event.data === YT.PlayerState.ENDED) {
-              playNextSong();
-            }
-          }
+          onStateChange: onPlayerStateChange
         }
       });
     }
-
-async function playNextSong() {
-  if (currentIndex + 1 < songs.length) {
-    const next = songs[currentIndex + 1];
-    playSong(next.id, next.title, currentIndex + 1);
-  } else {
-    await syncPlayStatusToServer("", "", 0);
-    await fetch(API_BASE + "/api/pause", { method: "POST" });
-    document.getElementById("nowPlaying").textContent = "현재 재생 중: 없음";
-  }
-}
-
 
     window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
 
