@@ -126,15 +126,15 @@
       });
     }
 
-    function syncPlayStatusToServer(id, title, seekSeconds) {
-      const now = Math.floor(Date.now() / 1000);
-      const adjustedStart = now - seekSeconds;
-      return fetch(API_BASE + "/api/play", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, title, startTime: adjustedStart })
-      });
-    }
+function syncPlayStatusToServer(id, title, seekSeconds, isPausedValue = false) {
+  const now = Math.floor(Date.now() / 1000);
+  const adjustedStart = now - seekSeconds;
+  return fetch(API_BASE + "/api/play", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, title, startTime: adjustedStart, isPaused: isPausedValue }) // ✅ 포함됨
+  });
+}
 
     function addSong() {
       const title = document.getElementById("titleInput").value.trim();
@@ -169,17 +169,19 @@
     function playSong(id, title, index) {
       currentId = id;
       currentTitle = title;
-      syncPlayStatusToServer(id, title, 0).then(() => {
+      isPaused = false; // 🔐 먼저 내부 상태도 명시적으로 false 설정
+
+      syncPlayStatusToServer(id, title, 0, false).then(() => {
         if (player) {
           player.loadVideoById(id);
           player.playVideo(); // 🔇 웹은 무음
         }
         currentIndex = index;
         document.getElementById("nowPlaying").textContent = "현재 재생 중: " + title;
-        isPaused = false;
         updatePauseButton();
       });
-    }
+}
+
 
     function togglePause() {
       if (!player) return;
