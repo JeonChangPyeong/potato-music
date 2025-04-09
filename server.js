@@ -150,6 +150,16 @@ app.post("/api/play", (req, res) => {
   res.json({ success: true });
 });
 
+// API: data.json 전체 조회용 (개발용)
+app.get("/api/debug/data", (req, res) => {
+  const db = readData();
+  res.json(db);
+});
+
+app.get("/", (req, res) => {
+  res.send("🎵 Potato Music API Server is running!");
+});
+
 // 서버 실행
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
