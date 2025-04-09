@@ -1,0 +1,94 @@
+
+<!-- player_app.html - 앱 전용 (소리 재생 가능) -->
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>Potato Music (App)</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #fff; }
+    #player { width: 480px; height: 270px; margin-top: 30px; }
+  </style>
+</head>
+<body>
+  <div id="player"></div>
+
+  <script>
+    const API_BASE = "https://potato-music.onrender.com";
+    let player = null;
+    let currentId = "";
+    let currentTitle = "";
+
+    function syncPlayStatusToServer(id, title, seekSeconds) {
+      const now = Math.floor(Date.now() / 1000);
+      const adjustedStart = now - seekSeconds;
+      return fetch(API_BASE + "/api/play", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, title, startTime: adjustedStart })
+      });
+    }
+
+    function playNextSong() {
+      fetch(API_BASE + "/api/playlist")
+        .then(res => res.json())
+        .then(songs => {
+          const index = songs.findIndex(s => s.id === currentId);
+          if (index + 1 < songs.length) {
+            const next = songs[index + 1];
+            syncPlayStatusToServer(next.id, next.title, 0);
+            player.loadVideoById(next.id);
+            player.playVideo();
+            currentId = next.id;
+            currentTitle = next.title;
+          } else {
+            syncPlayStatusToServer("", "", 0);
+            fetch(API_BASE + "/api/pause", { method: "POST" });
+          }
+        });
+    }
+
+    function onPlayerStateChange(event) {
+      if (event.data === YT.PlayerState.PLAYING && currentId) {
+        const t = Math.floor(player.getCurrentTime());
+        syncPlayStatusToServer(currentId, currentTitle, t);
+      }
+
+      if (event.data === YT.PlayerState.ENDED) {
+        playNextSong();
+      }
+    }
+
+    function onYouTubeIframeAPIReady() {
+      player = new YT.Player("player", {
+        height: "270",
+        width: "480",
+        videoId: "",
+        playerVars: { autoplay: 1, playsinline: 1 }, // ❌ mute 제거됨
+        events: {
+          onReady: () => {
+            fetch(API_BASE + "/api/status")
+              .then(res => res.json())
+              .then(status => {
+                if (status?.id) {
+                  currentId = status.id;
+                  currentTitle = status.title;
+                  const elapsed = Math.floor(Date.now() / 1000) - status.startTime;
+                  player.loadVideoById(status.id);
+                  player.seekTo(elapsed, true);
+                  if (!status.isPaused) player.playVideo();
+                }
+              });
+          },
+          onStateChange: onPlayerStateChange
+        }
+      });
+    }
+
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+    window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
+  </script>
+</body>
+</html>
