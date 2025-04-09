@@ -125,16 +125,27 @@ app.post("/api/pause", (req, res) => {
 
 // API: 재생 상태 수동 설정 (예비용)
 app.post("/api/play", (req, res) => {
-  const { id, title, startTime } = req.body;
+  const { id, title, startTime, isPaused } = req.body;
   if (!id || !title || !startTime) {
     return res.status(400).json({ error: "id, title, startTime 필수" });
   }
 
   const db = readData();
-  db.currentTrack = { id, title, startTime, isPaused: false };
+  db.currentTrack = {
+    id,
+    title,
+    startTime,
+    isPaused: isPaused ?? false // ✅ 클라이언트에서 주면 반영, 없으면 false
+  };
   writeData(db);
 
-  broadcast({ type: "play", id, title, startTime, isPaused: false });
+  broadcast({
+    type: "play",
+    id,
+    title,
+    startTime,
+    isPaused: db.currentTrack.isPaused
+  });
 
   res.json({ success: true });
 });
