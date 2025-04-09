@@ -19,8 +19,7 @@
     let ws;
     let currentId = "";
     let currentTitle = "";
-    let lastStartTime = 0;
-    let expectedSeek = 0;
+    let isPaused = true;
 
     function connectWebSocket() {
       ws = new WebSocket("wss://potato-music.onrender.com");
@@ -30,28 +29,26 @@
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if ((msg.type === "play" || msg.type === "seek") && player) {
-          const now = Math.floor(Date.now() / 1000);
-          const elapsed = now - msg.startTime;
+          const elapsed = Math.floor(Date.now() / 1000) - msg.startTime;
 
-          if (msg.id !== currentId) {
-            // 다른 곡이면 로딩부터
+          if (currentId !== msg.id) {
+            player.loadVideoById({
+              videoId: msg.id,
+              startSeconds: elapsed
+            });
             currentId = msg.id;
             currentTitle = msg.title;
-            lastStartTime = msg.startTime;
-            expectedSeek = elapsed;
-
-            player.loadVideoById(currentId);
-            // seek는 onStateChange에서 수행
-          } else if (Math.abs(elapsed - player.getCurrentTime()) > 2) {
-            // 같은 곡인데도 위치 차이 나면 seek
+          } else {
             player.seekTo(elapsed, true);
           }
 
           if (!msg.isPaused) {
             player.unMute?.();
             player.playVideo();
+            isPaused = false;
           } else {
             player.pauseVideo();
+            isPaused = true;
           }
 
           document.getElementById("nowPlaying").textContent = "현재 재생 중: " + msg.title;
@@ -59,6 +56,8 @@
 
         if (msg.type === "pause" && player) {
           player.pauseVideo();
+          isPaused = true;
+          document.getElementById("nowPlaying").textContent = "일시정지됨";
         }
       };
 
@@ -76,29 +75,38 @@
         playerVars: { autoplay: 1, mute: 0, playsinline: 1 },
         events: {
           onReady: () => {
-            fetch(API_BASE + "/api/status")
-              .then(res => res.json())
-              .then(status => {
-                if (status?.id) {
-                  currentId = status.id;
-                  currentTitle = status.title;
-                  lastStartTime = status.startTime;
-                  expectedSeek = Math.floor(Date.now() / 1000) - status.startTime;
-
-                  player.loadVideoById(currentId);
-                  // wait for onStateChange before seek
-                }
-              });
-          },
-          onStateChange: (event) => {
-            // 처음 시작 후 영상 로드되면 여기서 seek 수행
-            if (event.data === YT.PlayerState.CUED && expectedSeek > 0) {
-              player.seekTo(expectedSeek, true);
-              expectedSeek = 0;
-            }
+            syncWithServerStatus(); // 백그라운드 복귀 대비
+            document.addEventListener("visibilitychange", () => {
+              if (!document.hidden) {
+                syncWithServerStatus(); // 복귀 시 서버와 동기화
+              }
+            });
           }
         }
       });
+    }
+
+    function syncWithServerStatus() {
+      fetch(API_BASE + "/api/status")
+        .then(res => res.json())
+        .then(status => {
+          if (status?.id) {
+            const elapsed = Math.floor(Date.now() / 1000) - status.startTime;
+            currentId = status.id;
+            currentTitle = status.title;
+            isPaused = status.isPaused;
+
+            player.loadVideoById({
+              videoId: currentId,
+              startSeconds: elapsed
+            });
+
+            if (!isPaused) player.playVideo();
+            else player.pauseVideo();
+
+            document.getElementById("nowPlaying").textContent = "현재 재생 중: " + currentTitle;
+          }
+        });
     }
 
     connectWebSocket();
