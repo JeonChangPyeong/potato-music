@@ -2,83 +2,85 @@
 const express = require("express");
 const fs = require("fs");
 const cors = require("cors");
-const app = express();
-const PORT = process.env.PORT || 3000;
+const http = require("http");
+const WebSocket = require("ws");
 
+const app = express();
 app.use(cors());
 app.use(express.json());
 
+const PORT = process.env.PORT || 3000;
 const DATA_FILE = "data.json";
-const STATUS_FILE = "status.json";
 
-// 기본 파일 생성
-if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, "[]");
-if (!fs.existsSync(STATUS_FILE)) {
-  fs.writeFileSync(
-    STATUS_FILE,
-    JSON.stringify({ id: "", title: "", startTime: 0, isPaused: false }, null, 2)
-  );
+function readData() {
+  return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
 }
 
+function writeData(data) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+// 기본 API
 app.get("/api/playlist", (req, res) => {
-  const data = fs.readFileSync(DATA_FILE);
-  res.json(JSON.parse(data));
+  const data = readData();
+  res.json(data.playlist || []);
 });
 
 app.post("/api/playlist", (req, res) => {
-  const { title, id } = req.body;
-  const data = JSON.parse(fs.readFileSync(DATA_FILE));
-  data.push({ title, id });
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-  res.sendStatus(200);
+  const data = readData();
+  data.playlist.push(req.body);
+  writeData(data);
+  res.json({ success: true });
 });
 
 app.post("/api/playlist/delete", (req, res) => {
-  const { id } = req.body;
-  const data = JSON.parse(fs.readFileSync(DATA_FILE));
-  const filtered = data.filter(item => item.id !== id);
-  fs.writeFileSync(DATA_FILE, JSON.stringify(filtered, null, 2));
-
-  // 플레이리스트 비면 상태 초기화
-  if (filtered.length === 0) {
-    fs.writeFileSync(
-      STATUS_FILE,
-      JSON.stringify({ id: "", title: "", startTime: 0, isPaused: false }, null, 2)
-    );
-  }
-
-  res.sendStatus(200);
+  const data = readData();
+  data.playlist = data.playlist.filter(s => s.id !== req.body.id);
+  writeData(data);
+  res.json({ success: true });
 });
 
 app.post("/api/play", (req, res) => {
-  const { id, title, startTime } = req.body;
-  const now = Math.floor(Date.now() / 1000);
-  const status = {
-    id,
-    title,
-    startTime: startTime || now,
-    isPaused: false
-  };
-  fs.writeFileSync(STATUS_FILE, JSON.stringify(status, null, 2));
-  res.sendStatus(200);
+  const data = readData();
+  data.currentTrack = req.body;
+  writeData(data);
+  broadcast({ type: "play", ...req.body });
+  res.json({ success: true });
 });
 
 app.post("/api/pause", (req, res) => {
-  const current = JSON.parse(fs.readFileSync(STATUS_FILE));
-  current.isPaused = true;
-  fs.writeFileSync(STATUS_FILE, JSON.stringify(current, null, 2));
-  res.sendStatus(200);
+  const data = readData();
+  if (data.currentTrack) data.currentTrack.isPaused = true;
+  writeData(data);
+  broadcast({ type: "pause" });
+  res.json({ success: true });
 });
 
 app.get("/api/status", (req, res) => {
-  const status = fs.readFileSync(STATUS_FILE);
-  res.json(JSON.parse(status));
+  const data = readData();
+  res.json(data.currentTrack || {});
 });
 
-app.get("/", (req, res) => {
-  res.send("🎵 Potato Music API Server is running!");
+// HTTP + WebSocket 서버
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+const clients = new Set();
+
+wss.on("connection", (ws) => {
+  clients.add(ws);
+  ws.on("close", () => clients.delete(ws));
 });
 
-app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+function broadcast(message) {
+  const json = JSON.stringify(message);
+  for (const client of clients) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(json);
+    }
+  }
+}
+
+server.listen(PORT, () => {
+  console.log("Server listening on port", PORT);
 });
