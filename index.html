@@ -16,39 +16,20 @@
       align-items: center;
       gap: 10px;
     }
-    li.dragging {
-      opacity: 0.5;
-      background-color: #d0ebff;
-    }
     li img.thumbnail {
       width: 90px;
       height: 60px;
       border-radius: 4px;
     }
-    .controls button {
-      margin-left: 6px;
-    }
-    #nowPlaying {
-      margin: 10px 0;
-      font-weight: bold;
-    }
-    #pauseButton {
-      margin-bottom: 15px;
-    }
-    #playerContainer {
-      margin-top: 30px;
-      display: flex;
-      justify-content: center;
-    }
-    #player {
-      width: 480px;
-      height: 270px;
-    }
+    .controls button { margin-left: 6px; }
+    #nowPlaying { margin: 10px 0; font-weight: bold; }
+    #pauseButton { margin-bottom: 15px; }
+    #playerContainer { margin-top: 30px; display: flex; justify-content: center; }
+    #player { width: 480px; height: 270px; }
   </style>
 </head>
 <body>
   <h2>Potato Music 🎵</h2>
-
   <div id="nowPlaying">현재 재생 중: 없음</div>
   <button id="pauseButton">⏸ 일시정지</button>
 
@@ -67,12 +48,45 @@
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
   <script>
     const API_BASE = "https://potato-music.onrender.com";
+    let player, ws;
     let songs = [];
-    let player;
-    let isPaused = false;
-    let currentIndex = -1;
     let currentId = "";
     let currentTitle = "";
+    let currentIndex = -1;
+    let isPaused = false;
+    let lastReportedTime = 0;
+
+    function connectWebSocket() {
+      ws = new WebSocket("wss://potato-music.onrender.com");
+      ws.onopen = () => console.log("✅ WebSocket 연결됨");
+      ws.onclose = () => {
+        console.log("🔌 WebSocket 종료됨, 재연결 시도 중...");
+        setTimeout(connectWebSocket, 2000);
+      };
+    }
+
+    function sendWSMessage(msg) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(msg));
+      }
+    }
+
+    function syncPlayStatusToServer(id, title, seekSeconds) {
+      const startTime = Math.floor(Date.now() / 1000) - seekSeconds;
+      fetch(API_BASE + "/api/play", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, title, startTime, isPaused: false })
+      });
+
+      sendWSMessage({
+        type: "play",
+        id,
+        title,
+        startTime,
+        isPaused: false
+      });
+    }
 
     function loadSongs() {
       fetch(API_BASE + "/api/playlist")
@@ -86,10 +100,8 @@
     function renderPlaylist() {
       const list = document.getElementById("playlist");
       list.innerHTML = "";
-
       songs.forEach((song, index) => {
         const li = document.createElement("li");
-        li.setAttribute("data-id", index);
 
         const thumbnail = document.createElement("img");
         thumbnail.className = "thumbnail";
@@ -99,8 +111,8 @@
         info.style.flexGrow = "1";
         info.innerHTML = `<strong>${song.title}</strong>`;
 
-        const controlsDiv = document.createElement("div");
-        controlsDiv.className = "controls";
+        const controls = document.createElement("div");
+        controls.className = "controls";
 
         const playBtn = document.createElement("button");
         playBtn.textContent = "재생";
@@ -110,31 +122,15 @@
         delBtn.textContent = "삭제";
         delBtn.onclick = () => deleteSong(index);
 
-        controlsDiv.appendChild(playBtn);
-        controlsDiv.appendChild(delBtn);
+        controls.appendChild(playBtn);
+        controls.appendChild(delBtn);
 
         li.appendChild(thumbnail);
         li.appendChild(info);
-        li.appendChild(controlsDiv);
+        li.appendChild(controls);
         list.appendChild(li);
       });
-
-      Sortable.create(list, {
-        animation: 150,
-        onStart: evt => evt.item.classList.add("dragging"),
-        onEnd: evt => evt.item.classList.remove("dragging")
-      });
     }
-
-function syncPlayStatusToServer(id, title, seekSeconds, isPausedValue = false) {
-  const now = Math.floor(Date.now() / 1000);
-  const adjustedStart = now - seekSeconds;
-  return fetch(API_BASE + "/api/play", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ id, title, startTime: adjustedStart, isPaused: isPausedValue }) // ✅ 포함됨
-  });
-}
 
     function addSong() {
       const title = document.getElementById("titleInput").value.trim();
@@ -142,12 +138,11 @@ function syncPlayStatusToServer(id, title, seekSeconds, isPausedValue = false) {
       const match = url.match(/v=([^&]+)/);
       if (!match) return alert("유튜브 링크가 올바르지 않습니다.");
       const id = match[1];
-      const song = { title, id };
 
       fetch(API_BASE + "/api/playlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(song)
+        body: JSON.stringify({ id, title })
       }).then(() => {
         document.getElementById("titleInput").value = "";
         document.getElementById("urlInput").value = "";
@@ -161,39 +156,21 @@ function syncPlayStatusToServer(id, title, seekSeconds, isPausedValue = false) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: song.id })
-      }).then(() => {
-        loadSongs();
-      });
+      }).then(() => loadSongs());
     }
 
     function playSong(id, title, index) {
       currentId = id;
       currentTitle = title;
-      isPaused = false; // 🔐 먼저 내부 상태도 명시적으로 false 설정
-
-      syncPlayStatusToServer(id, title, 0, false).then(() => {
-        if (player) {
-          player.loadVideoById(id);
-          player.playVideo(); // 🔇 웹은 무음
-        }
-        currentIndex = index;
-        document.getElementById("nowPlaying").textContent = "현재 재생 중: " + title;
-        updatePauseButton();
-      });
-}
-
-
-    function togglePause() {
-      if (!player) return;
-      if (isPaused) {
-        player.playVideo();
-        syncPlayStatusToServer(songs[currentIndex].id, songs[currentIndex].title, Math.floor(player.getCurrentTime()));
-      } else {
-        player.pauseVideo();
-        fetch(API_BASE + "/api/pause", { method: "POST" });
-      }
-      isPaused = !isPaused;
+      currentIndex = index;
+      document.getElementById("nowPlaying").textContent = "현재 재생 중: " + title;
+      isPaused = false;
       updatePauseButton();
+      if (player) {
+        player.loadVideoById(id);
+        player.playVideo();
+      }
+      syncPlayStatusToServer(id, title, 0);
     }
 
     function updatePauseButton() {
@@ -201,38 +178,30 @@ function syncPlayStatusToServer(id, title, seekSeconds, isPausedValue = false) {
       btn.textContent = isPaused ? "▶ 다시 재생" : "⏸ 일시정지";
     }
 
+    function togglePause() {
+      if (!player) return;
+      if (isPaused) {
+        player.playVideo();
+        syncPlayStatusToServer(currentId, currentTitle, Math.floor(player.getCurrentTime()));
+      } else {
+        player.pauseVideo();
+        fetch(API_BASE + "/api/pause", { method: "POST" });
+        sendWSMessage({ type: "pause", id: currentId });
+      }
+      isPaused = !isPaused;
+      updatePauseButton();
+    }
+
     function playNextSong() {
       if (currentIndex + 1 < songs.length) {
         const next = songs[currentIndex + 1];
         playSong(next.id, next.title, currentIndex + 1);
       } else {
-        syncPlayStatusToServer("", "", 0).then(() => {
-          fetch(API_BASE + "/api/pause", { method: "POST" });
-          document.getElementById("nowPlaying").textContent = "현재 재생 중: 없음";
-        });
+        document.getElementById("nowPlaying").textContent = "현재 재생 중: 없음";
+        fetch(API_BASE + "/api/pause", { method: "POST" });
+        sendWSMessage({ type: "pause" });
       }
     }
-
-    function onPlayerStateChange(event) {
-  if (event.data === YT.PlayerState.PLAYING && currentId) {
-    const time = Math.floor(player.getCurrentTime());
-    syncPlayStatusToServer(currentId, currentTitle, time);
-  }
-
-  if (event.data === YT.PlayerState.PAUSED && currentId) {
-    const duration = player.getDuration();
-    const current = player.getCurrentTime();
-
-    if (current < duration - 1) {
-      fetch(API_BASE + "/api/pause", { method: "POST" });
-    }
-  }
-
-  if (event.data === YT.PlayerState.ENDED) {
-    playNextSong();
-  }
-}
-
 
     function onYouTubeIframeAPIReady() {
       player = new YT.Player("player", {
@@ -245,33 +214,48 @@ function syncPlayStatusToServer(id, title, seekSeconds, isPausedValue = false) {
             fetch(API_BASE + "/api/status")
               .then(res => res.json())
               .then(status => {
-                const foundIndex = songs.findIndex(s => s.id === status.id);
-                if (status?.id && foundIndex !== -1) {
+                const idx = songs.findIndex(s => s.id === status.id);
+                if (status?.id && idx !== -1) {
+                  currentId = status.id;
+                  currentTitle = status.title;
+                  currentIndex = idx;
                   const elapsed = Math.floor(Date.now() / 1000) - status.startTime;
-                  currentIndex = foundIndex;
-                  isPaused = status.isPaused;
                   player.loadVideoById(status.id);
                   player.seekTo(elapsed, true);
                   document.getElementById("nowPlaying").textContent = "현재 재생 중: " + status.title;
+                  if (!status.isPaused) player.playVideo();
                 }
               });
           },
-          onStateChange: onPlayerStateChange
+          onStateChange: (event) => {
+            if (event.data === YT.PlayerState.ENDED) playNextSong();
+          }
         }
       });
     }
-
-    window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
 
     document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("addButton").addEventListener("click", addSong);
       document.getElementById("pauseButton").addEventListener("click", togglePause);
       loadSongs();
+      connectWebSocket();
+
+      // 실시간 seek 감지 -> WebSocket 전달
+      setInterval(() => {
+        if (!player || typeof player.getCurrentTime !== "function") return;
+        const current = Math.floor(player.getCurrentTime());
+        if (Math.abs(current - lastReportedTime) > 2 && currentId) {
+          const startTime = Math.floor(Date.now() / 1000) - current;
+          sendWSMessage({ type: "play", id: currentId, title: currentTitle, startTime, isPaused: false });
+          lastReportedTime = current;
+        }
+      }, 1000);
     });
 
     const tag = document.createElement("script");
     tag.src = "https://www.youtube.com/iframe_api";
     document.head.appendChild(tag);
+    window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
   </script>
 </body>
 </html>
