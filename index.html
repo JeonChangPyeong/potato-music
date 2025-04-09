@@ -168,7 +168,7 @@
       syncPlayStatusToServer(id, title, 0).then(() => {
         if (player) {
           player.loadVideoById(id);
-          player.unMute();
+          // player.unMute();
           player.playVideo();
         }
         document.getElementById("nowPlaying").textContent = "현재 재생 중: " + title;
@@ -201,7 +201,7 @@
         height: "270",
         width: "480",
         videoId: "",
-        playerVars: { autoplay: 1, mute: 0, playsinline: 1 },
+        playerVars: { autoplay: 1, mute: 1, playsinline: 1 },
         events: {
           onReady: () => {
             fetch(API_BASE + "/api/status")
@@ -216,7 +216,7 @@
                   player.loadVideoById(status.id);
                   player.seekTo(elapsed, true);
                   if (!status.isPaused) {
-                    player.unMute();
+                    // player.unMute();
                     player.playVideo();
                   }
                   document.getElementById("nowPlaying").textContent = "현재 재생 중: " + status.title;
