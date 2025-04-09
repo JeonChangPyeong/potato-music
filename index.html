@@ -130,8 +130,11 @@
     function addSong() {
       const title = document.getElementById("titleInput").value.trim();
       const url = document.getElementById("urlInput").value.trim();
-      const match = url.match(/v=([^&]+)/);
+
+      // shorts 또는 일반 유튜브 링크 모두 지원
+      const match = url.match(/(?:v=|\/shorts\/)([a-zA-Z0-9_-]{11})/);
       if (!match) return alert("유튜브 링크가 올바르지 않습니다.");
+
       const id = match[1];
       const song = { title, id };
 
@@ -145,6 +148,7 @@
         loadSongs();
       });
     }
+
 
     function deleteSong(index) {
       const song = songs[index];
