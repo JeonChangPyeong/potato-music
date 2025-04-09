@@ -72,6 +72,9 @@
     let isPaused = false;
     let currentIndex = -1;
 
+    let currentId = "";
+    let currentTitle = "";
+
     function loadSongs() {
       fetch(API_BASE + "/api/playlist")
         .then(res => res.json())
@@ -132,6 +135,13 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, title, startTime: adjustedStart })
       });
+    }
+
+    function onPlayerStateChange(event) {
+      if (event.data === YT.PlayerState.PLAYING && currentId) {
+        const time = Math.floor(player.getCurrentTime());
+        syncPlayStatusToServer(currentId, currentTitle, time);
+      }
     }
 
     function addSong() {
