@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="ko">
 <head>
@@ -6,56 +5,220 @@
   <title>Potato Music</title>
   <style>
     body { font-family: sans-serif; padding: 20px; background: #fff; }
-    #player { width: 480px; height: 270px; margin-top: 30px; }
-    #nowPlaying { font-weight: bold; margin-bottom: 10px; }
+    ul { padding: 0; }
+    li {
+      padding: 10px;
+      margin-bottom: 5px;
+      background: #f1f1f1;
+      border-radius: 5px;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    li.dragging {
+      opacity: 0.5;
+      background-color: #d0ebff;
+    }
+    li img.thumbnail {
+      width: 90px;
+      height: 60px;
+      border-radius: 4px;
+    }
+    .controls button {
+      margin-left: 6px;
+    }
+    #nowPlaying {
+      margin: 10px 0;
+      font-weight: bold;
+    }
+    #pauseButton {
+      margin-bottom: 15px;
+    }
+    #playerContainer {
+      margin-top: 30px;
+      display: flex;
+      justify-content: center;
+    }
+    #player {
+      width: 480px;
+      height: 270px;
+    }
   </style>
 </head>
 <body>
   <h2>Potato Music 🎵</h2>
-  <div id="nowPlaying">현재 재생 중: 없음</div>
-  <div id="player"></div>
 
+  <div id="nowPlaying">현재 재생 중: 없음</div>
+  <button id="pauseButton">⏸ 일시정지</button>
+
+  <div>
+    <input id="titleInput" placeholder="노래 제목" />
+    <input id="urlInput" placeholder="유튜브 링크" />
+    <button id="addButton">추가</button>
+  </div>
+
+  <ul id="playlist"></ul>
+
+  <div id="playerContainer">
+    <div id="player"></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
   <script>
     const API_BASE = "https://potato-music.onrender.com";
+    let songs = [];
     let player;
-    let ws;
+    let isPaused = false;
+    let currentIndex = -1;
     let currentId = "";
     let currentTitle = "";
 
-    function connectWebSocket() {
-      ws = new WebSocket("wss://potato-music.onrender.com");
-
-      ws.onopen = () => {
-        console.log("✅ WebSocket 연결됨");
-      };
-
-      ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "play" && player) {
-          const elapsed = Math.floor(Date.now() / 1000) - msg.startTime;
-          player.loadVideoById(msg.id);
-          player.seekTo(elapsed, true);
-          if (!msg.isPaused) {
-            player.playVideo();
-          } else {
-            player.pauseVideo();
-          }
-          document.getElementById("nowPlaying").textContent = "현재 재생 중: " + msg.title;
-        }
-        if (msg.type === "pause" && player) {
-          player.pauseVideo();
-        }
-      };
-
-      ws.onclose = () => {
-        console.log("🔌 WebSocket 종료됨, 재연결 시도 중...");
-        setTimeout(connectWebSocket, 2000);
-      };
+    function loadSongs() {
+      fetch(API_BASE + "/api/playlist")
+        .then(res => res.json())
+        .then(data => {
+          songs = data;
+          renderPlaylist();
+        });
     }
 
-    function sendWSMessage(message) {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(message));
+    function renderPlaylist() {
+      const list = document.getElementById("playlist");
+      list.innerHTML = "";
+
+      songs.forEach((song, index) => {
+        const li = document.createElement("li");
+        li.setAttribute("data-id", index);
+
+        const thumbnail = document.createElement("img");
+        thumbnail.className = "thumbnail";
+        thumbnail.src = `https://img.youtube.com/vi/${song.id}/mqdefault.jpg`;
+
+        const info = document.createElement("div");
+        info.style.flexGrow = "1";
+        info.innerHTML = `<strong>${song.title}</strong>`;
+
+        const controlsDiv = document.createElement("div");
+        controlsDiv.className = "controls";
+
+        const playBtn = document.createElement("button");
+        playBtn.textContent = "재생";
+        playBtn.onclick = () => playSong(song.id, song.title, index);
+
+        const delBtn = document.createElement("button");
+        delBtn.textContent = "삭제";
+        delBtn.onclick = () => deleteSong(index);
+
+        controlsDiv.appendChild(playBtn);
+        controlsDiv.appendChild(delBtn);
+
+        li.appendChild(thumbnail);
+        li.appendChild(info);
+        li.appendChild(controlsDiv);
+        list.appendChild(li);
+      });
+
+      Sortable.create(list, {
+        animation: 150,
+        onStart: evt => evt.item.classList.add("dragging"),
+        onEnd: evt => evt.item.classList.remove("dragging")
+      });
+    }
+
+    function syncPlayStatusToServer(id, title, seekSeconds) {
+      const now = Math.floor(Date.now() / 1000);
+      const adjustedStart = now - seekSeconds;
+      return fetch(API_BASE + "/api/play", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, title, startTime: adjustedStart })
+      });
+    }
+
+    function addSong() {
+      const title = document.getElementById("titleInput").value.trim();
+      const url = document.getElementById("urlInput").value.trim();
+      const match = url.match(/v=([^&]+)/);
+      if (!match) return alert("유튜브 링크가 올바르지 않습니다.");
+      const id = match[1];
+      const song = { title, id };
+
+      fetch(API_BASE + "/api/playlist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(song)
+      }).then(() => {
+        document.getElementById("titleInput").value = "";
+        document.getElementById("urlInput").value = "";
+        loadSongs();
+      });
+    }
+
+    function deleteSong(index) {
+      const song = songs[index];
+      fetch(API_BASE + "/api/playlist/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: song.id })
+      }).then(() => {
+        loadSongs();
+      });
+    }
+
+    function playSong(id, title, index) {
+      currentId = id;
+      currentTitle = title;
+      syncPlayStatusToServer(id, title, 0).then(() => {
+        if (player) {
+          player.loadVideoById(id);
+          player.playVideo(); // 🔇 웹은 무음
+        }
+        currentIndex = index;
+        document.getElementById("nowPlaying").textContent = "현재 재생 중: " + title;
+        isPaused = false;
+        updatePauseButton();
+      });
+    }
+
+    function togglePause() {
+      if (!player) return;
+      if (isPaused) {
+        player.playVideo();
+        syncPlayStatusToServer(songs[currentIndex].id, songs[currentIndex].title, Math.floor(player.getCurrentTime()));
+      } else {
+        player.pauseVideo();
+        fetch(API_BASE + "/api/pause", { method: "POST" });
+      }
+      isPaused = !isPaused;
+      updatePauseButton();
+    }
+
+    function updatePauseButton() {
+      const btn = document.getElementById("pauseButton");
+      btn.textContent = isPaused ? "▶ 다시 재생" : "⏸ 일시정지";
+    }
+
+    function playNextSong() {
+      if (currentIndex + 1 < songs.length) {
+        const next = songs[currentIndex + 1];
+        playSong(next.id, next.title, currentIndex + 1);
+      } else {
+        syncPlayStatusToServer("", "", 0).then(() => {
+          fetch(API_BASE + "/api/pause", { method: "POST" });
+          document.getElementById("nowPlaying").textContent = "현재 재생 중: 없음";
+        });
+      }
+    }
+
+    function onPlayerStateChange(event) {
+      if (event.data === YT.PlayerState.PLAYING && currentId) {
+        const time = Math.floor(player.getCurrentTime());
+        syncPlayStatusToServer(currentId, currentTitle, time);
+      }
+
+      if (event.data === YT.PlayerState.ENDED) {
+        playNextSong();
       }
     }
 
@@ -64,57 +227,39 @@
         height: "270",
         width: "480",
         videoId: "",
-        playerVars: { autoplay: 1, playsinline: 1 },
+        playerVars: { autoplay: 1, mute: 1, playsinline: 1 },
         events: {
           onReady: () => {
             fetch(API_BASE + "/api/status")
               .then(res => res.json())
               .then(status => {
-                if (status?.id) {
+                const foundIndex = songs.findIndex(s => s.id === status.id);
+                if (status?.id && foundIndex !== -1) {
                   const elapsed = Math.floor(Date.now() / 1000) - status.startTime;
-                  currentId = status.id;
-                  currentTitle = status.title;
+                  currentIndex = foundIndex;
+                  isPaused = status.isPaused;
                   player.loadVideoById(status.id);
                   player.seekTo(elapsed, true);
-                  if (!status.isPaused) player.playVideo();
                   document.getElementById("nowPlaying").textContent = "현재 재생 중: " + status.title;
                 }
               });
           },
-          onStateChange: (event) => {
-            if (event.data === YT.PlayerState.PLAYING && currentId) {
-              const t = Math.floor(player.getCurrentTime());
-              sendWSMessage({ type: "play", id: currentId, title: currentTitle, startTime: Math.floor(Date.now() / 1000) - t, isPaused: false });
-            }
-            if (event.data === YT.PlayerState.PAUSED && currentId) {
-              sendWSMessage({ type: "pause", id: currentId });
-            }
-            if (event.data === YT.PlayerState.ENDED) {
-              fetch(API_BASE + "/api/playlist")
-                .then(res => res.json())
-                .then(songs => {
-                  const index = songs.findIndex(s => s.id === currentId);
-                  if (index + 1 < songs.length) {
-                    const next = songs[index + 1];
-                    currentId = next.id;
-                    currentTitle = next.title;
-                    sendWSMessage({ type: "play", id: next.id, title: next.title, startTime: Math.floor(Date.now() / 1000), isPaused: false });
-                  } else {
-                    sendWSMessage({ type: "pause" });
-                  }
-                });
-            }
-          }
+          onStateChange: onPlayerStateChange
         }
       });
     }
 
-    connectWebSocket();
+    window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
+
+    document.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("addButton").addEventListener("click", addSong);
+      document.getElementById("pauseButton").addEventListener("click", togglePause);
+      loadSongs();
+    });
 
     const tag = document.createElement("script");
     tag.src = "https://www.youtube.com/iframe_api";
     document.head.appendChild(tag);
-    window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
   </script>
 </body>
 </html>
