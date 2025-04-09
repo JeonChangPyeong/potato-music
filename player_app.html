@@ -1,25 +1,33 @@
+
 <!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>Potato Music App</title>
+  <title>Potato Music</title>
   <style>
-    body { font-family: sans-serif; background: #fff; }
-    #player { width: 1px; height: 1px; overflow: hidden; }
+    body { font-family: sans-serif; padding: 20px; background: #fff; }
+    #player { width: 480px; height: 270px; margin-top: 30px; }
+    #nowPlaying { font-weight: bold; margin-bottom: 10px; }
   </style>
 </head>
 <body>
+  <h2>Potato Music 🎵</h2>
+  <div id="nowPlaying">현재 재생 중: 없음</div>
   <div id="player"></div>
 
   <script>
     const API_BASE = "https://potato-music.onrender.com";
-    const WS_URL = "wss://potato-music.onrender.com";
-
     let player;
     let ws;
+    let currentId = "";
+    let currentTitle = "";
 
     function connectWebSocket() {
-      ws = new WebSocket(WS_URL);
+      ws = new WebSocket("wss://potato-music.onrender.com");
+
+      ws.onopen = () => {
+        console.log("✅ WebSocket 연결됨");
+      };
 
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
@@ -32,6 +40,7 @@
           } else {
             player.pauseVideo();
           }
+          document.getElementById("nowPlaying").textContent = "현재 재생 중: " + msg.title;
         }
         if (msg.type === "pause" && player) {
           player.pauseVideo();
@@ -39,24 +48,68 @@
       };
 
       ws.onclose = () => {
-        console.log("🔌 WebSocket 종료됨, 재연결...");
-        setTimeout(connectWebSocket, 1000);
+        console.log("🔌 WebSocket 종료됨, 재연결 시도 중...");
+        setTimeout(connectWebSocket, 2000);
       };
+    }
+
+    function sendWSMessage(message) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(message));
+      }
     }
 
     function onYouTubeIframeAPIReady() {
       player = new YT.Player("player", {
-        height: "1",
-        width: "1",
+        height: "270",
+        width: "480",
         videoId: "",
-        playerVars: {
-          autoplay: 1,
-          mute: 0,
-          playsinline: 1
+        playerVars: { autoplay: 1, playsinline: 1 },
+        events: {
+          onReady: () => {
+            fetch(API_BASE + "/api/status")
+              .then(res => res.json())
+              .then(status => {
+                if (status?.id) {
+                  const elapsed = Math.floor(Date.now() / 1000) - status.startTime;
+                  currentId = status.id;
+                  currentTitle = status.title;
+                  player.loadVideoById(status.id);
+                  player.seekTo(elapsed, true);
+                  if (!status.isPaused) player.playVideo();
+                  document.getElementById("nowPlaying").textContent = "현재 재생 중: " + status.title;
+                }
+              });
+          },
+          onStateChange: (event) => {
+            if (event.data === YT.PlayerState.PLAYING && currentId) {
+              const t = Math.floor(player.getCurrentTime());
+              sendWSMessage({ type: "play", id: currentId, title: currentTitle, startTime: Math.floor(Date.now() / 1000) - t, isPaused: false });
+            }
+            if (event.data === YT.PlayerState.PAUSED && currentId) {
+              sendWSMessage({ type: "pause", id: currentId });
+            }
+            if (event.data === YT.PlayerState.ENDED) {
+              fetch(API_BASE + "/api/playlist")
+                .then(res => res.json())
+                .then(songs => {
+                  const index = songs.findIndex(s => s.id === currentId);
+                  if (index + 1 < songs.length) {
+                    const next = songs[index + 1];
+                    currentId = next.id;
+                    currentTitle = next.title;
+                    sendWSMessage({ type: "play", id: next.id, title: next.title, startTime: Math.floor(Date.now() / 1000), isPaused: false });
+                  } else {
+                    sendWSMessage({ type: "pause" });
+                  }
+                });
+            }
+          }
         }
       });
-      connectWebSocket();
     }
+
+    connectWebSocket();
 
     const tag = document.createElement("script");
     tag.src = "https://www.youtube.com/iframe_api";
