@@ -90,9 +90,6 @@
               const t = Math.floor(player.getCurrentTime());
               sendWSMessage({ type: "play", id: currentId, title: currentTitle, startTime: Math.floor(Date.now() / 1000) - t, isPaused: false });
             }
-            if (event.data === YT.PlayerState.PAUSED && currentId) {
-              sendWSMessage({ type: "pause", id: currentId });
-            }
             if (event.data === YT.PlayerState.ENDED) {
               fetch(API_BASE + "/api/playlist")
                 .then(res => res.json())
