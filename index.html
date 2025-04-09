@@ -165,13 +165,15 @@
       isPaused = false;
       currentIndex = index;
 
+    if (t > 1) {
       sendWSMessage({
         type: "play",
-        id,
-        title,
-        startTime: Math.floor(Date.now() / 1000),
+        id: currentId,
+        title: currentTitle,
+        startTime: Math.floor(Date.now() / 1000) - t,
         isPaused: false
       });
+    }
 
       player.loadVideoById(id);
       player.playVideo();
