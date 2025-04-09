@@ -124,8 +124,6 @@
     function syncPlayStatusToServer(id, title, seekSeconds) {
       const now = Math.floor(Date.now() / 1000);
       const adjustedStart = now - seekSeconds;
-
-      // 서버 저장 + 전체 브로드캐스트
       sendWSMessage({ type: "seek", id, title, startTime: adjustedStart, isPaused: false });
     }
 
@@ -165,15 +163,13 @@
       isPaused = false;
       currentIndex = index;
 
-    if (t > 1) {
       sendWSMessage({
         type: "play",
         id: currentId,
         title: currentTitle,
-        startTime: Math.floor(Date.now() / 1000) - t,
+        startTime: Math.floor(Date.now() / 1000),
         isPaused: false
       });
-    }
 
       player.loadVideoById(id);
       player.playVideo();
@@ -227,10 +223,10 @@
                   const elapsed = Math.floor(Date.now() / 1000) - status.startTime;
                   player.loadVideoById(status.id);
                   player.seekTo(elapsed, true);
-                  document.getElementById("nowPlaying").textContent = "현재 재생 중: " + status.title;
                   currentId = status.id;
                   currentTitle = status.title;
                   isPaused = status.isPaused;
+                  document.getElementById("nowPlaying").textContent = "현재 재생 중: " + currentTitle;
                 }
               });
           },
@@ -242,16 +238,17 @@
                 sendWSMessage({ type: "pause", id: currentId });
               }
             }
+
             if (event.data === YT.PlayerState.PLAYING && currentId) {
               const t = Math.floor(player.getCurrentTime());
               sendWSMessage({ type: "play", id: currentId, title: currentTitle, startTime: Math.floor(Date.now() / 1000) - t, isPaused: false });
             }
+
             if (event.data === YT.PlayerState.ENDED) {
               if (currentIndex + 1 < songs.length) {
                 const next = songs[currentIndex + 1];
                 playSong(next.id, next.title, currentIndex + 1);
               } else {
-                // 마지막 곡이면 재생 종료 상태로 처리
                 sendWSMessage({ type: "pause", id: currentId });
                 document.getElementById("nowPlaying").textContent = "현재 재생 중: 없음";
                 isPaused = true;
