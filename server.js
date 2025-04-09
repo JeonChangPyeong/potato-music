@@ -75,6 +75,10 @@ app.get("/api/status", (req, res) => {
   res.json(JSON.parse(status));
 });
 
+app.get("/", (req, res) => {
+  res.send("🎵 Potato Music API Server is running!");
+});
+
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
