@@ -67,6 +67,24 @@ wss.on("connection", (ws) => {
         broadcast(msg);
       }
 
+    // ✅ 추가: seeker 이동 반영
+    if (msg.type === "seek") {
+      db.currentTrack = {
+        id: msg.id,
+        title: msg.title,
+        startTime: msg.startTime,
+        isPaused: msg.isPaused ?? false
+      };
+      writeData(db);
+      broadcast({
+        type: "play", // 앱에서는 play 메시지로 받아 처리 중
+        id: msg.id,
+        title: msg.title,
+        startTime: msg.startTime,
+        isPaused: db.currentTrack.isPaused
+      });
+    }
+      
     } catch (err) {
       console.error("🚫 WebSocket 메시지 처리 오류:", err.message);
     }
