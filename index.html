@@ -101,7 +101,7 @@
 
         const playBtn = document.createElement("button");
         playBtn.textContent = "재생";
-        playBtn.onclick = () => playSong(song.id, song.title, index);
+        playBtn.onclick = () => playSong(song.id, song.title);
 
         const delBtn = document.createElement("button");
         delBtn.textContent = "삭제";
@@ -165,14 +165,15 @@
 
     function playSong(id, title) {
       const startTime = Math.floor(Date.now() / 1000);
-      socket.send(JSON.stringify({
+      sendWSMessage({
         type: "play",
         id,
         title,
         startTime,
         isPaused: false
-      }));
+      });
     }
+
 
     function togglePause() {
       if (!player) return;
