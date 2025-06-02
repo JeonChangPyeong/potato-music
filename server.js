@@ -13,6 +13,7 @@ const DATA_PATH = path.join(__dirname, "data.json");
 
 app.use(cors());
 app.use(express.json());
+app.use(express.static(path.join(__dirname, '/'))); // ✅ 이 줄을 추가
 
 // 데이터 로드
 function readData() {
