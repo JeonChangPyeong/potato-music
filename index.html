@@ -42,7 +42,7 @@
       const data = await res.json();
       const tbody = document.querySelector("#playlistTable tbody");
       tbody.innerHTML = "";
-      data.forEach((track, index) => {
+      data.playlist.forEach((track, index) => {
         const row = document.createElement("tr");
         row.innerHTML = `
           <td>${track.title}</td>
