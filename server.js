@@ -169,6 +169,14 @@ app.post("/api/play", (req, res) => {
   res.json({ success: true });
 });
 
+app.post("/api/debug/data", (req, res) => {
+  const db = readData();
+  const updated = { ...db, playlist: req.body.playlist };
+  writeData(updated);
+  res.json({ success: true });
+});
+
+
 // API: data.json 전체 조회용 (개발용)
 app.get("/api/debug/data", (req, res) => {
   const db = readData();

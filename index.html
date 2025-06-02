@@ -2,84 +2,197 @@
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
-  <title>Potato Music 관리자</title>
+  <title>포테이토 뮤직 관리자</title>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    table { border-collapse: collapse; width: 100%; margin-top: 10px; }
-    td, th { border: 1px solid #ccc; padding: 8px; text-align: left; }
-    #controls { margin-top: 20px; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #f9f9f9;
+      padding: 30px;
+    }
+    h2 {
+      color: #333;
+    }
+    .section {
+      margin-top: 40px;
+    }
+    .controls button {
+      padding: 8px 14px;
+      margin-right: 8px;
+      background: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .controls input {
+      width: 60px;
+      padding: 6px;
+      margin-right: 8px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      box-shadow: 0 0 5px rgba(0,0,0,0.1);
+    }
+    th, td {
+      border: 1px solid #ddd;
+      padding: 10px;
+      text-align: left;
+    }
+    th {
+      background: #f2f2f2;
+    }
+    tr.highlight {
+      background-color: #e1f5fe !important;
+    }
+    .add-section input {
+      padding: 8px;
+      margin-right: 10px;
+    }
+    .add-section button {
+      padding: 8px 16px;
+      background: #2196F3;
+      color: white;
+      border: none;
+      border-radius: 4px;
+    }
+    tr.dragging {
+      opacity: 0.5;
+    }
   </style>
 </head>
 <body>
-  <h2>🎛️ 관리자 페이지</h2>
+  <h2>포테이토 뮤직 관리자 페이지</h2>
 
-  <div id="controls">
-    <button onclick="play()">재생</button>
-    <button onclick="pause()">일시정지</button>
-    <button onclick="next()">다음 곡</button>
-    <input type="number" id="seekSeconds" value="30" />초
-    <button onclick="seek()">시커</button>
+  <div class="section controls">
+    <button onclick="play()">▶️ 재생</button>
+    <button onclick="pause()">⏸️ 일시정지</button>
+    <button onclick="next()">⏭️ 다음 곡</button>
+    <input type="number" id="seekSeconds" value="30" />
+    <button onclick="seek()">화상 시컨</button>
   </div>
 
-  <h3>📋 플레이리스트</h3>
-  <table id="playlistTable">
-    <thead>
-      <tr><th>제목</th><th>Video ID</th><th>작업</th></tr>
-    </thead>
-    <tbody></tbody>
-  </table>
+  <div class="section">
+    <h3>📋 플레이리스트</h3>
+    <table>
+      <thead>
+        <tr><th>제목</th><th>Video ID</th><th>작업</th></tr>
+      </thead>
+      <tbody id="playlistTable"></tbody>
+    </table>
+  </div>
 
-  <h3>➕ 곡 추가</h3>
-  <input id="videoIdInput" placeholder="YouTube Video ID" />
-  <input id="titleInput" placeholder="제목" />
-  <button onclick="addSong()">추가</button>
+  <div class="section add-section">
+    <h3>➕ 곡 추가</h3>
+    <input id="videoIdInput" placeholder="YouTube Video ID" />
+    <input id="titleInput" placeholder="곡 제목" />
+    <button onclick="addSong()">추가</button>
+  </div>
 
   <script>
     const API = "https://potato-music.onrender.com";
+    let currentId = "";
+    let dragSrcEl;
 
     async function loadPlaylist() {
-      const res = await fetch(API + "/data.json");
+      const res = await fetch(API + "/api/playlist");
       const data = await res.json();
-      const tbody = document.querySelector("#playlistTable tbody");
+      const statusRes = await fetch(API + "/api/status");
+      const status = await statusRes.json();
+      currentId = status.id;
+
+      const tbody = document.getElementById("playlistTable");
       tbody.innerHTML = "";
-      data.playlist.forEach((track, index) => {
+
+      data.forEach(track => {
         const row = document.createElement("tr");
+        row.setAttribute("draggable", true);
+        row.dataset.id = track.id;
+        if (track.id === currentId) row.classList.add("highlight");
         row.innerHTML = `
           <td>${track.title}</td>
           <td>${track.id}</td>
-          <td><button onclick="remove(${index})">삭제</button></td>
+          <td><button onclick="removeSong('${track.id}')">삭제</button></td>
         `;
+
+        row.addEventListener("dragstart", e => {
+          dragSrcEl = row;
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", row.dataset.id);
+          row.classList.add("dragging");
+        });
+
+        row.addEventListener("dragend", () => row.classList.remove("dragging"));
+
+        row.addEventListener("dragover", e => e.preventDefault());
+
+        row.addEventListener("drop", async e => {
+          e.preventDefault();
+          const draggedId = e.dataTransfer.getData("text/plain");
+          const targetId = row.dataset.id;
+          if (draggedId === targetId) return;
+
+          const res = await fetch(API + "/api/playlist");
+          let list = await res.json();
+          const draggedIdx = list.findIndex(item => item.id === draggedId);
+          const targetIdx = list.findIndex(item => item.id === targetId);
+          const [moved] = list.splice(draggedIdx, 1);
+          list.splice(targetIdx, 0, moved);
+
+          await fetch(API + "/api/debug/data", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...readData(), playlist: list })
+          });
+
+          loadPlaylist();
+        });
+
         tbody.appendChild(row);
       });
     }
 
     async function addSong() {
-      const videoId = document.getElementById("videoIdInput").value.trim();
+      const id = document.getElementById("videoIdInput").value.trim();
       const title = document.getElementById("titleInput").value.trim();
-      if (!videoId || !title) return alert("값을 입력하세요");
-
-      await fetch(API + "/api/add", {
+      if (!id || !title) return alert("곡 ID 또는 제목을 입력해주세요.");
+      await fetch(API + "/api/playlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: videoId, title })
+        body: JSON.stringify({ id, title })
       });
-
       document.getElementById("videoIdInput").value = "";
       document.getElementById("titleInput").value = "";
       loadPlaylist();
     }
 
-    async function remove(index) {
-      await fetch(API + "/api/remove", {
+    async function removeSong(id) {
+      await fetch(API + "/api/playlist/delete", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ index })
+        body: JSON.stringify({ id })
       });
       loadPlaylist();
     }
 
-    function play() {
-      fetch(API + "/api/play", { method: "POST" });
+    async function play() {
+      const res = await fetch(API + "/api/playlist");
+      const playlist = await res.json();
+      if (!playlist.length) return alert("플레이리스트가 비어 있습니다.");
+      const track = playlist[0];
+      const payload = {
+        id: track.id,
+        title: track.title,
+        startTime: Math.floor(Date.now() / 1000),
+        isPaused: false
+      };
+      await fetch(API + "/api/play", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      loadPlaylist();
     }
 
     function pause() {
@@ -87,16 +200,25 @@
     }
 
     function next() {
-      fetch(API + "/api/next", { method: "POST" });
+      alert("⛉ 다음 곡 기본적 목록은 없습니다.\n규칙을 드는 프로그램이 아니라\n개발자가 ‘신뢰가 그 시간과 id’를 하나를 골라가면 다음 곡을 지정할 수 있습니다.");
     }
 
     function seek() {
       const sec = parseInt(document.getElementById("seekSeconds").value || "0");
-      fetch(API + "/api/seek", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ seconds: sec })
-      });
+      fetch(API + "/api/status")
+        .then(res => res.json())
+        .then(status => {
+          if (!status.id) return alert("가장 마지막이 보이지 않음");
+          const payload = {
+            type: "seek",
+            id: status.id,
+            title: status.title,
+            startTime: Math.floor(Date.now() / 1000) - sec,
+            isPaused: status.isPaused || false
+          };
+          const ws = new WebSocket("wss://potato-music.onrender.com");
+          ws.onopen = () => ws.send(JSON.stringify(payload));
+        });
     }
 
     loadPlaylist();
