@@ -59,7 +59,7 @@
   <ul id="playlist"></ul>
 
   <div id="playerContainer">
-    <div id="player"></div>
+
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
@@ -163,24 +163,15 @@
       });
     }
 
-    function playSong(id, title, index) {
-      currentId = id;
-      currentTitle = title;
-      isPaused = false;
-      currentIndex = index;
-
-      sendWSMessage({
+    function playSong(id, title) {
+      const startTime = Math.floor(Date.now() / 1000);
+      socket.send(JSON.stringify({
         type: "play",
-        id: currentId,
-        title: currentTitle,
-        startTime: Math.floor(Date.now() / 1000),
+        id,
+        title,
+        startTime,
         isPaused: false
-      });
-
-      player.loadVideoById(id);
-      player.playVideo();
-      document.getElementById("nowPlaying").textContent = "현재 재생 중: " + title;
-      updatePauseButton();
+      }));
     }
 
     function togglePause() {
@@ -214,69 +205,13 @@
       ws.onclose = () => setTimeout(connectWebSocket, 2000);
     }
 
-    function onYouTubeIframeAPIReady() {
-      player = new YT.Player("player", {
-        height: "270",
-        width: "480",
-        videoId: "",
-        playerVars: { autoplay: 1, mute: 1, playsinline: 1 },
-        events: {
-          onReady: () => {
-            fetch(API_BASE + "/api/status")
-              .then(res => res.json())
-              .then(status => {
-                if (status?.id) {
-                  const elapsed = Math.floor(Date.now() / 1000) - status.startTime;
-                  player.loadVideoById(status.id);
-                  player.seekTo(elapsed, true);
-                  currentId = status.id;
-                  currentTitle = status.title;
-                  isPaused = status.isPaused;
-                  document.getElementById("nowPlaying").textContent = "현재 재생 중: " + currentTitle;
-                }
-              });
-          },
-          onStateChange: (event) => {
-            if (event.data === YT.PlayerState.PAUSED && currentId) {
-              const duration = player.getDuration();
-              const current = player.getCurrentTime();
-              if (current < duration - 1) {
-                sendWSMessage({ type: "pause", id: currentId });
-              }
-            }
-
-            if (event.data === YT.PlayerState.PLAYING && currentId) {
-              const t = Math.floor(player.getCurrentTime());
-              sendWSMessage({ type: "play", id: currentId, title: currentTitle, startTime: Math.floor(Date.now() / 1000) - t, isPaused: false });
-            }
-
-            if (event.data === YT.PlayerState.ENDED) {
-              if (currentIndex + 1 < songs.length) {
-                const next = songs[currentIndex + 1];
-                playSong(next.id, next.title, currentIndex + 1);
-              } else {
-                sendWSMessage({ type: "pause", id: currentId });
-                document.getElementById("nowPlaying").textContent = "현재 재생 중: 없음";
-                isPaused = true;
-                updatePauseButton();
-              }
-            }
-          }
-        }
-      });
-    }
-
     document.addEventListener("DOMContentLoaded", () => {
       connectWebSocket();
       loadSongs();
       document.getElementById("addButton").addEventListener("click", addSong);
       document.getElementById("pauseButton").addEventListener("click", togglePause);
     });
-
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.head.appendChild(tag);
-    window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
+    // window.onYouTubeIframeAPIReady = onYouTubeIframeAPIReady;
   </script>
 </body>
 </html>
